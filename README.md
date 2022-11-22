@@ -3,7 +3,7 @@
 #### 모델링
 ![image](https://user-images.githubusercontent.com/17038832/202998076-649e9e58-6231-4d43-9cdb-0e5de1e9c843.png)
 
-#### 소스 코드
+#### 체크포인트 및 소스 코드
 1. Saga(pub/sub)
 ```java
 // Order - pub : 저장 후 카프카에 publish
