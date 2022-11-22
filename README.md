@@ -125,12 +125,18 @@ hystrix:
 
 // callback 서비스를 생성
 @Service
-public class PaymentCallbackService implements PaymentService {
+public class PaymentServiceCallback implements PaymentService {
     public void createPay(Payment payment){
         // 임시 payment 정보를 생성하고.. 추후 처리함.
         repository.save(payment);
         // 성공 처리
     }
+}
+// callback class 추가
+@FeignClient(name = "pay", url = "${api.url.pay}")
+public interface PaymentService {
+    @RequestMapping(method= RequestMethod.POST, path="/payments", callback = PaymentCallbackService.class)
+    public void createPay(@RequestBody Payment payment);
 }
 ```
 6. 
