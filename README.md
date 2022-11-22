@@ -21,6 +21,88 @@
         Order.changeOrderState(event);
     }
 ```
+2. CQRS
+```java
+// MenuViewHandler에서 배송 시작시 item을 다시 메뉴 veiw에 넣어줌.
+    @StreamListener(KafkaProcessor.INPUT)
+    public void whenDeliveryStarted_then_CREATE_1 (@Payload DeliveryStarted deliveryStarted) {
+        try {
+            if (!deliveryStarted.validate()) return;
+            // view 객체 생성
+            Menu menu = new Menu();
+            // view 객체에 이벤트의 Value 를 set 함
+            menu.setItem(ordered.getItem());
+            // 필요시 item 상세 정보를 조회하여 set
+            // view 레파지 토리에 save
+            menuRepository.save(menu);
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+```
+3. Compensation and Correlation
+
+4. request / response
+```java
+
+    @PostPersist
+    public void onPostPersist(){
+        //Following code causes dependency to external APIs
+        // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
+        foodorder.external.Payment payment = new foodorder.external.Payment();
+        // mappings goes here
+        AppApplication.applicationContext.getBean(foodorder.external.PaymentService.class)
+            .createPay(payment);
+            
+        Ordered ordered = new Ordered(this);
+        ordered.publishAfterCommit();
+    }
+// PaymentService - FeignClient 인터페이스 선언
+// application.yml에 pay 서비스 도메인 셋팅 ${api.url.pay} 
+@FeignClient(name = "pay", url = "${api.url.pay}")
+public interface PaymentService {
+    @RequestMapping(method= RequestMethod.POST, path="/payments")
+    public void createPay(@RequestBody Payment payment);
+}
+// pay 서비스에 controller 생성 /payments
+@RestController
+// @RequestMapping(value="/payments")
+@Transactional
+public class PaymentController {
+    @Autowired
+    PaymentRepository paymentRepository;
+
+    @PostMapping(value="/payments")
+    public void createPay(@RequestBody Payment payment) {
+        paymentRepository.createPay(payment);
+    }
+}
+```
+5. 서킷브레이커
+```java
+// application.yml에 설정한다.
+feign:
+  hystrix:
+    enabled: true
+
+hystrix:
+  command:
+    # 전역설정
+    default:
+      execution.isolation.thread.timeoutInMilliseconds: 610
+
+// callback 서비스를 생성
+@Service
+public class PaymentCallbackService implements PaymentService {
+    public void createPay(Payment payment){
+        // 임시 payment 정보를 생성하고.. 추후 처리함.
+        repository.save(payment);
+        // 성공 처리
+    }
+}
+```
+6. 
 
 ![image](https://user-images.githubusercontent.com/487999/79708354-29074a80-82fa-11ea-80df-0db3962fb453.png)
 
