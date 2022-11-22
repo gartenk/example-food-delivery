@@ -31,7 +31,7 @@
             // view 객체 생성
             Menu menu = new Menu();
             // view 객체에 이벤트의 Value 를 set 함
-            menu.setItem(ordered.getItem());
+            menu.setItem(deliveryStarted.getItem());
             // 필요시 item 상세 정보를 조회하여 set
             // view 레파지 토리에 save
             menuRepository.save(menu);
