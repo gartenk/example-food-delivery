@@ -50,11 +50,10 @@
         Order order = orderRepository.findById(id).get();
         orderRepository.delete(order);
     }
-
     @PreRemove
     public void onPreRemove(){
-        OrderCancelled orderCancelled = new OrderCancelled(this);
-        orderCancelled.publishAfterCommit();
+        OrderCanceled orderCanceled = new OrderCanceled(this);
+        orderCanceled.publishAfterCommit();
     }
 // MenuView Handler에서 view 정보가 생성되도록 추가
     @StreamListener(KafkaProcessor.INPUT)
@@ -127,7 +126,7 @@ hystrix:
 @Service
 public class PaymentServiceCallback implements PaymentService {
     public void createPay(Payment payment){
-        // 임시 payment 정보를 생성하고.. 추후 처리함.
+        // 임시 payment 정보를 생성하고.. 추후 결제 처리함.
         repository.save(payment);
         // 성공 처리
     }
@@ -135,11 +134,70 @@ public class PaymentServiceCallback implements PaymentService {
 // callback class 추가
 @FeignClient(name = "pay", url = "${api.url.pay}")
 public interface PaymentService {
-    @RequestMapping(method= RequestMethod.POST, path="/payments", callback = PaymentCallbackService.class)
+    @RequestMapping(method= RequestMethod.POST, path="/payments", callback = PaymentServiceCallback.class)
     public void createPay(@RequestBody Payment payment);
 }
 ```
-6. 
+6. gateway & ingress
+```yaml
+// gateway 서비스 생성하여 아래 설정 추가
+spring:
+  profiles: default
+  cloud:
+    gateway:
+      routes:
+        - id: app
+          uri: http://localhost:8081
+          predicates:
+            - Path=/orders/**, /menus/**, /orderStates/**
+        - id: pay
+          uri: http://localhost:8082
+          predicates:
+            - Path=/payments/**, 
+        - id: store
+          uri: http://localhost:8083
+          predicates:
+            - Path=/orders/**, /viewOrders/**
+        - id: frontend
+          uri: http://localhost:8080
+          predicates:
+            - Path=/**
+// ingress 설정
+apiVersion: networking.k8s.io/v1
+kind: "Ingress"
+metadata: 
+  name: "shopping-ingress"
+  annotations: 
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    ingressclass.kubernetes.io/is-default-class: "true"
+spec: 
+  ingressClassName: nginx
+  rules: 
+    - host: ""
+      http: 
+        paths: 
+          - path: /orders
+            pathType: Prefix
+            backend: 
+              service:
+                name: app
+                port:
+                  number: 8080
+          - path: /payments
+            pathType: Prefix
+            backend: 
+              service:
+                name: pay
+                port:
+                  number: 8080
+          - path: /stores
+            pathType: Prefix
+            backend: 
+              service:
+                name: store
+                port:
+                  number: 8080
+```
 
 ![image](https://user-images.githubusercontent.com/487999/79708354-29074a80-82fa-11ea-80df-0db3962fb453.png)
 
