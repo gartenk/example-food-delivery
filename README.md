@@ -42,7 +42,38 @@
     }
 ```
 3. Compensation and Correlation
+```java
+// 주문 취소 command 추가    
+    @DeleteMapping(value="/orders/{id}")
+    public void deleteOrder(@PathVariable Long id) {
+        // 주문 정보를 조회하여 Menu view 정보를 추가한다.
+        Order order = orderRepository.findById(id).get();
+        orderRepository.delete(order);
+    }
 
+    @PreRemove
+    public void onPreRemove(){
+        OrderCancelled orderCancelled = new OrderCancelled(this);
+        orderCancelled.publishAfterCommit();
+    }
+// MenuView Handler에서 view 정보가 생성되도록 추가
+    @StreamListener(KafkaProcessor.INPUT)
+    public void whenOrderCanceled_then_CREATE_2 (@Payload OrderCanceled orderCanceled) {
+        try {
+            if (!deliveryStarted.validate()) return;
+            // view 객체 생성
+            Menu menu = new Menu();
+            // view 객체에 이벤트의 Value 를 set 함
+            menu.setItem(orderCanceled.getItem());
+            // 필요시 item 상세 정보를 조회하여 set
+            // view 레파지 토리에 save
+            menuRepository.save(menu);
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+```
 4. request / response
 ```java
 
