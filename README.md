@@ -168,7 +168,7 @@ spring:
         - id: store
           uri: http://localhost:8083
           predicates:
-            - Path=/orders/**, /viewOrders/**
+            - Path=/stores/**
         - id: frontend
           uri: http://localhost:8080
           predicates:
