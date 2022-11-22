@@ -135,17 +135,17 @@ hystrix:
 // 서비스를 다운하고 아래와 같이 callback 등록하여 정상적으로 서비스됨을 확인. 
 // callback 서비스를 생성
 @Service
-public class PaymentServiceCallback implements PaymentService {
+public class PaymentServiceFallback implements PaymentService {
     public void createPay(Payment payment){
         // 임시 payment 정보를 생성하고.. 추후 결제 처리함.
         repository.save(payment);
         // 성공 처리
     }
 }
-// callback class 추가
-@FeignClient(name = "pay", url = "${api.url.pay}")
+// fallback class 추가
+@FeignClient(name = "pay", url = "${api.url.pay}", fallback = PaymentServiceFallback.class)
 public interface PaymentService {
-    @RequestMapping(method= RequestMethod.POST, path="/payments", callback = PaymentServiceCallback.class)
+    @RequestMapping(method= RequestMethod.POST, path="/payments")
     public void createPay(@RequestBody Payment payment);
 }
 ```
