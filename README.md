@@ -121,7 +121,18 @@ hystrix:
     # 전역설정
     default:
       execution.isolation.thread.timeoutInMilliseconds: 610
+      
+// Delay 가 발생함에 따라 적당히 201 code 와 500 오류 코드가 반복되며 부하를 조절하면서 요청을 관리하는 것을 확인할 수 있다.
+ @PostLoad
+ public void makeDelay(){
+     try {
+         Thread.currentThread().sleep((long) (400 + Math.random() * 220));
+     } catch (InterruptedException e) {
+         e.printStackTrace();
+     }
 
+ }
+// 서비스를 다운하고 아래와 같이 callback 등록하여 정상적으로 서비스됨을 확인. 
 // callback 서비스를 생성
 @Service
 public class PaymentServiceCallback implements PaymentService {
@@ -162,6 +173,9 @@ spring:
           uri: http://localhost:8080
           predicates:
             - Path=/**
+
+// Ingress Controller 설치
+helm install nginx-ingress ingress-nginx/ingress-nginx --namespace=ingress-basic
 // ingress 설정
 apiVersion: networking.k8s.io/v1
 kind: "Ingress"
