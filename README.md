@@ -1,4 +1,26 @@
+
+#### 서비스 시나리오 : 아래 이전 시나리오에 볼드 처리
+#### 모델링
 ![image](https://user-images.githubusercontent.com/17038832/202998076-649e9e58-6231-4d43-9cdb-0e5de1e9c843.png)
+
+#### 소스 코드
+1. Saga(pub/sub)
+```java
+// Order - pub : 저장 후 카프카에 publish
+        DeliveryStarted deliveryStarted = new DeliveryStarted(this);
+        deliveryStarted.publishAfterCommit();
+        
+// PolicyHandler - sub 카프카 메시지를 가져와서 주문 상태를 변경한다.
+    @StreamListener(value=KafkaProcessor.INPUT, condition="headers['type']=='DeliveryStarted'")
+    public void wheneverDeliveryStarted_ChangeOrderState(@Payload DeliveryStarted deliveryStarted){
+
+        // 배송 시작시 메시지를 받아서 주문 상태를 변경함.
+        DeliveryStarted event = deliveryStarted;
+        System.out.println("\n\n##### listener ChangeOrderState : " + deliveryStarted + "\n\n");        
+
+        Order.changeOrderState(event);
+    }
+```
 
 ![image](https://user-images.githubusercontent.com/487999/79708354-29074a80-82fa-11ea-80df-0db3962fb453.png)
 
