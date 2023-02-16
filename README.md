@@ -1,9 +1,9 @@
 
-#### 서비스 시나리오 : 아래 이전 시나리오에 볼드 처리
-#### 모델링
-![image](https://user-images.githubusercontent.com/17038832/202998076-649e9e58-6231-4d43-9cdb-0e5de1e9c843.png)
 
-#### 체크포인트 및 소스 코드
+#### 모델링
+![image](https://user-images.githubusercontent.com/17038832/219269278-ea2a8c13-7cd0-4ed7-98a4-3dfd10914700.png)
+
+#### Microservice Implementation
 1. Saga(pub/sub)
 ```java
 // Order - pub : 저장 후 카프카에 publish
@@ -73,145 +73,12 @@
         }
     }
 ```
-4. request / response
-```java
 
-    @PostPersist
-    public void onPostPersist(){
-        //Following code causes dependency to external APIs
-        // it is NOT A GOOD PRACTICE. instead, Event-Policy mapping is recommended.
-        foodorder.external.Payment payment = new foodorder.external.Payment();
-        // mappings goes here
-        AppApplication.applicationContext.getBean(foodorder.external.PaymentService.class)
-            .createPay(payment);
-            
-        Ordered ordered = new Ordered(this);
-        ordered.publishAfterCommit();
-    }
-// PaymentService - FeignClient 인터페이스 선언
-// application.yml에 pay 서비스 도메인 셋팅 ${api.url.pay} 
-@FeignClient(name = "pay", url = "${api.url.pay}")
-public interface PaymentService {
-    @RequestMapping(method= RequestMethod.POST, path="/payments")
-    public void createPay(@RequestBody Payment payment);
-}
-// pay 서비스에 controller 생성 /payments
-@RestController
-// @RequestMapping(value="/payments")
-@Transactional
-public class PaymentController {
-    @Autowired
-    PaymentRepository paymentRepository;
+### Microservice Orchestration
+1. Deploy to EKS Cluster
+2. Gateway & Service Router 설치
+3. Autoscale (HPA)
 
-    @PostMapping(value="/payments")
-    public void createPay(@RequestBody Payment payment) {
-        paymentRepository.createPay(payment);
-    }
-}
-```
-5. 서킷브레이커
-```java
-// application.yml에 설정한다.
-feign:
-  hystrix:
-    enabled: true
-
-hystrix:
-  command:
-    # 전역설정
-    default:
-      execution.isolation.thread.timeoutInMilliseconds: 610
-      
-// Delay 가 발생함에 따라 적당히 201 code 와 500 오류 코드가 반복되며 부하를 조절하면서 요청을 관리하는 것을 확인할 수 있다.
- @PostLoad
- public void makeDelay(){
-     try {
-         Thread.currentThread().sleep((long) (400 + Math.random() * 220));
-     } catch (InterruptedException e) {
-         e.printStackTrace();
-     }
-
- }
-// 서비스를 다운하고 아래와 같이 callback 등록하여 정상적으로 서비스됨을 확인. 
-// callback 서비스를 생성
-@Service
-public class PaymentServiceFallback implements PaymentService {
-    public void createPay(Payment payment){
-        // 임시 payment 정보를 생성하고.. 추후 결제 처리함.
-        repository.save(payment);
-        // 성공 처리
-    }
-}
-// fallback class 추가
-@FeignClient(name = "pay", url = "${api.url.pay}", fallback = PaymentServiceFallback.class)
-public interface PaymentService {
-    @RequestMapping(method= RequestMethod.POST, path="/payments")
-    public void createPay(@RequestBody Payment payment);
-}
-```
-6. gateway & ingress
-```yaml
-// gateway 서비스 생성하여 아래 설정 추가
-spring:
-  profiles: default
-  cloud:
-    gateway:
-      routes:
-        - id: app
-          uri: http://localhost:8081
-          predicates:
-            - Path=/orders/**, /menus/**, /orderStates/**
-        - id: pay
-          uri: http://localhost:8082
-          predicates:
-            - Path=/payments/**, 
-        - id: store
-          uri: http://localhost:8083
-          predicates:
-            - Path=/stores/**
-        - id: frontend
-          uri: http://localhost:8080
-          predicates:
-            - Path=/**
-
-// Ingress Controller 설치
-helm install nginx-ingress ingress-nginx/ingress-nginx --namespace=ingress-basic
-// ingress 설정
-apiVersion: networking.k8s.io/v1
-kind: "Ingress"
-metadata: 
-  name: "shopping-ingress"
-  annotations: 
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    ingressclass.kubernetes.io/is-default-class: "true"
-spec: 
-  ingressClassName: nginx
-  rules: 
-    - host: ""
-      http: 
-        paths: 
-          - path: /orders
-            pathType: Prefix
-            backend: 
-              service:
-                name: app
-                port:
-                  number: 8080
-          - path: /payments
-            pathType: Prefix
-            backend: 
-              service:
-                name: pay
-                port:
-                  number: 8080
-          - path: /stores
-            pathType: Prefix
-            backend: 
-              service:
-                name: store
-                port:
-                  number: 8080
-```
 
 ![image](https://user-images.githubusercontent.com/487999/79708354-29074a80-82fa-11ea-80df-0db3962fb453.png)
 
