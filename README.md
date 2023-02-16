@@ -144,6 +144,11 @@
 - kubectl get all
 ![image](https://user-images.githubusercontent.com/17038832/219297111-3bf373c7-bc4a-41f1-aabd-7ac7350e76df.png)
 2. Gateway & Service Router 설치
+- gateway 배포
+![image](https://user-images.githubusercontent.com/17038832/219307895-57f072c6-e219-4a0a-b3af-3df9e5c9e1ae.png)
+- kubectl get all
+![image](https://user-images.githubusercontent.com/17038832/219308238-1a3cdf6b-0b06-4a9f-8482-9a9f7499081f.png)
+
 - kafka client 설치 및 접속
 ![image](https://user-images.githubusercontent.com/17038832/219298452-f2a0b063-a980-4bb6-979f-43f73e356047.png)
 - http call
