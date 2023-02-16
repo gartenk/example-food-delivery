@@ -165,6 +165,8 @@
 ![image](https://user-images.githubusercontent.com/17038832/219302985-19d76337-271d-46db-8484-d72aa729b578.png)
 - pod 증가
 ![image](https://user-images.githubusercontent.com/17038832/219303067-6218e809-b84e-40f0-81cc-1e57ddd5b703.png)
+- metric 설치 및 확인
+![image](https://user-images.githubusercontent.com/17038832/219309812-0e5a544d-c511-41e0-9d63-d7b6466c7b66.png)
 
 
 
