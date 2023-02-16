@@ -6,35 +6,101 @@
 #### Microservice Implementation
 1. Saga(pub/sub)
 ```java
-// Order - pub : 저장 후 카프카에 publish
-        DeliveryStarted deliveryStarted = new DeliveryStarted(this);
-        deliveryStarted.publishAfterCommit();
+    // PolicyHandler에서 카프카 리스닝
+    @StreamListener(value=KafkaProcessor.INPUT, condition="headers['type']=='OrderPlaced'")
+    public void wheneverOrderPlaced_OrderCreate(@Payload OrderPlaced orderPlaced){
+
+        OrderPlaced event = orderPlaced;
+        System.out.println("\n\n##### listener OrderCreate : " + orderPlaced + "\n\n");
+        // Sample Logic //
+        StoreOrder.orderCreate(event);
+
+    }
+
+    @StreamListener(value=KafkaProcessor.INPUT, condition="headers['type']=='OrderCanceled'")
+    public void wheneverOrderCanceled_OrderCancel(@Payload OrderCanceled orderCanceled){
+        OrderCanceled event = orderCanceled;
+        System.out.println("\n\n##### listener OrderCancel : " + orderCanceled + "\n\n");
+        // Sample Logic //
+        StoreOrder.orderCancel(event);
+    }
+    // StoreOrder 에서 저장 처리
+    public static void orderCreate(OrderPlaced orderPlaced){
+
+        /** Example 1:  new item */
+        StoreOrder storeOrder = new StoreOrder();
+        storeOrder.setFoodId(orderPlaced.getFoodId());        
+        storeOrder.setPreference(orderPlaced.getPreference());
+        storeOrder.setOrderId(orderPlaced.getId());
+        repository().save(storeOrder);
+
+
+        /** Example 2:  finding and process
         
-// PolicyHandler - sub 카프카 메시지를 가져와서 주문 상태를 변경한다.
-    @StreamListener(value=KafkaProcessor.INPUT, condition="headers['type']=='DeliveryStarted'")
-    public void wheneverDeliveryStarted_ChangeOrderState(@Payload DeliveryStarted deliveryStarted){
+        repository().findByOrderId(orderPlaced.getId()).ifPresent(storeOrder->{            
+            storeOrder.setFoodId(orderPlaced.getFoodId());        
+            storeOrder.setPreference(orderPlaced.getPreference());
+            storeOrder.setOrderId(orderPlaced.getId());
+            repository().save(storeOrder);
+         });
+         */        
+    }
+    public static void orderCancel(OrderCanceled orderCanceled){
 
-        // 배송 시작시 메시지를 받아서 주문 상태를 변경함.
-        DeliveryStarted event = deliveryStarted;
-        System.out.println("\n\n##### listener ChangeOrderState : " + deliveryStarted + "\n\n");        
+        /** Example 1:  new item 
+        StoreOrder storeOrder = new StoreOrder();
+        repository().save(storeOrder);
 
-        Order.changeOrderState(event);
+        */
+
+        /** Example 2:  finding and process*/
+        
+        repository().findByOrderId(orderCanceled.getId()).ifPresent(storeOrder->{
+            storeOrder.setStatus("OrderCanceled"); // do something
+            storeOrder.setFoodId(orderCanceled.getFoodId());
+            repository().save(storeOrder);
+         });
     }
 ```
 2. CQRS
 ```java
-// MenuViewHandler에서 배송 시작시 item을 다시 메뉴 veiw에 넣어줌.
+    // view에 저장 
     @StreamListener(KafkaProcessor.INPUT)
-    public void whenDeliveryStarted_then_CREATE_1 (@Payload DeliveryStarted deliveryStarted) {
+    public void whenOrderPlaced_then_CREATE_1 (@Payload OrderPlaced orderPlaced) {
         try {
-            if (!deliveryStarted.validate()) return;
+
+            if (!orderPlaced.validate()) return;
+
             // view 객체 생성
-            Menu menu = new Menu();
+            OrderStatus orderStatus = new OrderStatus();
             // view 객체에 이벤트의 Value 를 set 함
-            menu.setItem(deliveryStarted.getItem());
-            // 필요시 item 상세 정보를 조회하여 set
+            orderStatus.setFoodId(orderPlaced.getFoodId());
+            orderStatus.setStatus("OrderPlaced");
+            orderStatus.setOrderId(orderPlaced.getId());
+            orderStatus.setQty(orderPlaced.getQty());
+            orderStatus.setStoreId(orderPlaced.getStoreId());
             // view 레파지 토리에 save
-            menuRepository.save(menu);
+            orderStatusRepository.save(orderStatus);
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+
+    @StreamListener(KafkaProcessor.INPUT)
+    public void whenAccepted_then_UPDATE_1(@Payload Accepted accepted) {
+        try {
+            if (!accepted.validate()) return;
+                // view 객체 조회
+
+                List<OrderStatus> orderStatusList = orderStatusRepository.findByOrderId(accepted.getOrderId());
+                for(OrderStatus orderStatus : orderStatusList){
+                    // view 객체에 이벤트의 eventDirectValue 를 set 함
+                    orderStatus.setStatus("OrderAccepted");
+                // view 레파지 토리에 save
+                orderStatusRepository.save(orderStatus);
+                }
 
         }catch (Exception e){
             e.printStackTrace();
@@ -43,41 +109,58 @@
 ```
 3. Compensation and Correlation
 ```java
-// 주문 취소 command 추가    
-    @DeleteMapping(value="/orders/{id}")
-    public void deleteOrder(@PathVariable Long id) {
-        // 주문 정보를 조회하여 Menu view 정보를 추가한다.
-        Order order = orderRepository.findById(id).get();
-        orderRepository.delete(order);
-    }
-    @PreRemove
-    public void onPreRemove(){
-        OrderCanceled orderCanceled = new OrderCanceled(this);
-        orderCanceled.publishAfterCommit();
-    }
-// MenuView Handler에서 view 정보가 생성되도록 추가
-    @StreamListener(KafkaProcessor.INPUT)
-    public void whenOrderCanceled_then_CREATE_2 (@Payload OrderCanceled orderCanceled) {
-        try {
-            if (!deliveryStarted.validate()) return;
-            // view 객체 생성
-            Menu menu = new Menu();
-            // view 객체에 이벤트의 Value 를 set 함
-            menu.setItem(orderCanceled.getItem());
-            // 필요시 item 상세 정보를 조회하여 set
-            // view 레파지 토리에 save
-            menuRepository.save(menu);
+    // orderCancel 후 Rejected 발생
+    @PostUpdate
+    public void onPostUpdate(){
+        CookStarted cookStarted = new CookStarted(this);
+        cookStarted.publishAfterCommit();
 
-        }catch (Exception e){
-            e.printStackTrace();
-        }
+        Accepted accepted = new Accepted(this);
+        accepted.publishAfterCommit();
+
+        Rejected rejected = new Rejected(this);
+        rejected.publishAfterCommit();
+
+        CookFinished cookFinished = new CookFinished(this);
+        cookFinished.publishAfterCommit();
+    }
+    // AlertUser : PolicyHandler에서 view 정보가 생성되도록 추가    
+    @StreamListener(value=KafkaProcessor.INPUT, condition="headers['type']=='Rejected'")
+    public void wheneverRejected_AlertUser(@Payload Rejected rejected){
+
+        Rejected event = rejected;
+        System.out.println("\n\n##### listener AlertUser : " + rejected + "\n\n");       
+
+        // Sample Logic //
+        Log.alertUser(event);
     }
 ```
 
 ### Microservice Orchestration
 1. Deploy to EKS Cluster
+![image](https://user-images.githubusercontent.com/17038832/219293684-4f0cd7ab-5c8a-4f56-aac5-0c164969b3a4.png)
+- deployment.yaml 수정
+![image](https://user-images.githubusercontent.com/17038832/219294280-9598c830-35b8-4a8b-91ef-d88cd684a58e.png)
+- kubectl get all
+![image](https://user-images.githubusercontent.com/17038832/219297111-3bf373c7-bc4a-41f1-aabd-7ac7350e76df.png)
 2. Gateway & Service Router 설치
+- kafka client 설치 및 접속
+![image](https://user-images.githubusercontent.com/17038832/219298452-f2a0b063-a980-4bb6-979f-43f73e356047.png)
+- http call
+![image](https://user-images.githubusercontent.com/17038832/219299387-3a5f8c8d-1173-4509-a610-c90c0e55d26b.png)
+
 3. Autoscale (HPA)
+- 추가 설정
+![image](https://user-images.githubusercontent.com/17038832/219300153-e7b85ba9-9cfd-455f-8026-6584236156de.png)
+- autoscale 설정 
+![image](https://user-images.githubusercontent.com/17038832/219301200-c1d1e41b-e170-466d-b275-5d986e5e04b7.png)
+- 부하발생
+![image](https://user-images.githubusercontent.com/17038832/219302447-1eda8293-b4c9-4780-a31f-37bd2e2276b7.png)
+- kubectl get hpa
+![image](https://user-images.githubusercontent.com/17038832/219302985-19d76337-271d-46db-8484-d72aa729b578.png)
+- pod 증가
+![image](https://user-images.githubusercontent.com/17038832/219303067-6218e809-b84e-40f0-81cc-1e57ddd5b703.png)
+
 
 
 ![image](https://user-images.githubusercontent.com/487999/79708354-29074a80-82fa-11ea-80df-0db3962fb453.png)
